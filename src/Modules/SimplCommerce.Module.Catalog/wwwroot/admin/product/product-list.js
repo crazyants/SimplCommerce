@@ -5,9 +5,10 @@
         .controller('ProductListCtrl', ProductListCtrl);
 
     /* @ngInject */
-    function ProductListCtrl(productService) {
+    function ProductListCtrl(productService, translateService) {
         var vm = this,
             tableStateRef;
+        vm.translate = translateService;
         vm.products = [];
 
         vm.getProducts = function getProducts(tableState) {
@@ -27,11 +28,18 @@
         };
 
         vm.deleteProduct = function deleteProduct(product) {
-            if (confirm("Are you sure?")) {
-                productService.deleteProduct(product).then(function (result) {
-                    vm.getProducts(tableStateRef);
-                });
-            }
+            bootbox.confirm('Are you sure you want to delete this product: ' + product.name, function (result) {
+                if (result) {
+                    productService.deleteProduct(product)
+                       .then(function (result) {
+                           vm.getProducts(tableStateRef);
+                           toastr.success(product.name + ' has been deleted');
+                       })
+                        .catch(function (response) {
+                            toastr.error(response.data.error);
+                       });
+                }
+            });
         };
     }
 })();

@@ -1,7 +1,8 @@
 ﻿using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using SimplCommerce.Infrastructure;
+using Microsoft.EntityFrameworkCore;
 using SimplCommerce.Infrastructure.Data;
 using SimplCommerce.Module.Catalog.Models;
 using SimplCommerce.Module.Catalog.Services;
@@ -9,7 +10,7 @@ using SimplCommerce.Module.Catalog.ViewModels;
 
 namespace SimplCommerce.Module.Catalog.Controllers
 {
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "admin, vendor")]
     [Route("api/brands")]
     public class BrandApiController : Controller
     {
@@ -22,21 +23,22 @@ namespace SimplCommerce.Module.Catalog.Controllers
             _brandService = brandService;
         }
 
-        public IActionResult Get()
+        public async Task<IActionResult> Get()
         {
-            var brandList = _brandRepository.Query().Where(x => !x.IsDeleted).ToList();
+            var brandList = await _brandRepository.Query().Where(x => !x.IsDeleted).ToListAsync();
 
             return Json(brandList);
         }
 
         [HttpGet("{id}")]
-        public IActionResult Get(long id)
+        public async Task<IActionResult> Get(long id)
         {
-            var brand = _brandRepository.Query().FirstOrDefault(x => x.Id == id);
+            var brand = await _brandRepository.Query().FirstOrDefaultAsync(x => x.Id == id);
             var model = new BrandForm
             {
                 Id = brand.Id,
                 Name = brand.Name,
+                Slug = brand.SeoTitle,
                 IsPublished = brand.IsPublished
             };
 
@@ -44,53 +46,59 @@ namespace SimplCommerce.Module.Catalog.Controllers
         }
 
         [HttpPost]
-        public IActionResult Post([FromBody] BrandForm model)
+        [Authorize(Roles = "admin")]
+        public async Task<IActionResult> Post([FromBody] BrandForm model)
         {
             if (ModelState.IsValid)
             {
                 var brand = new Brand
                 {
                     Name = model.Name,
-                    SeoTitle = StringHelper.ToUrlFriendly(model.Name),
+                    SeoTitle = model.Slug,
                     IsPublished = model.IsPublished
                 };
 
-                _brandService.Create(brand);
-
-                return Ok();
+                await _brandService.Create(brand);
+                return CreatedAtAction(nameof(Get), new { id = brand.Id }, null);
             }
-            return new BadRequestObjectResult(ModelState);
+            return BadRequest(ModelState);
         }
 
         [HttpPut("{id}")]
-        public IActionResult Put(long id, [FromBody] BrandForm model)
+        [Authorize(Roles = "admin")]
+        public async Task<IActionResult> Put(long id, [FromBody] BrandForm model)
         {
             if (ModelState.IsValid)
             {
                 var brand = _brandRepository.Query().FirstOrDefault(x => x.Id == id);
+                if(brand == null)
+                {
+                    return NotFound();
+                }
+
                 brand.Name = model.Name;
-                brand.SeoTitle = StringHelper.ToUrlFriendly(model.Name);
+                brand.SeoTitle = model.Slug;
                 brand.IsPublished = model.IsPublished;
 
-                _brandService.Update(brand);
-
-                return Ok();
+                await _brandService.Update(brand);
+                return Accepted();
             }
 
-            return new BadRequestObjectResult(ModelState);
+            return BadRequest(ModelState);
         }
 
         [HttpDelete("{id}")]
-        public IActionResult Delete(long id)
+        [Authorize(Roles = "admin")]
+        public async Task<IActionResult> Delete(long id)
         {
             var brand = _brandRepository.Query().FirstOrDefault(x => x.Id == id);
             if (brand == null)
             {
-                return new NotFoundResult();
+                return NotFound();
             }
 
-            _brandService.Delete(brand);
-            return Json(true);
+            await _brandService.Delete(brand);
+            return NoContent();
         }
     }
 }

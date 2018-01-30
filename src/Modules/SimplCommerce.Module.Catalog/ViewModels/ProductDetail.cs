@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using SimplCommerce.Module.Catalog.Models;
 using SimplCommerce.Module.Core.ViewModels;
 
 namespace SimplCommerce.Module.Catalog.ViewModels
@@ -12,13 +13,21 @@ namespace SimplCommerce.Module.Catalog.ViewModels
 
         public string ShortDescription { get; set; }
 
-        public decimal Price { get; set; }
-
-        public decimal? OldPrice { get; set; }
+        public CalculatedProductPrice CalculatedProductPrice { get; set; }
 
         public string Description { get; set; }
 
         public string Specification { get; set; }
+
+        public bool IsCallForPricing { get; set; }
+
+        public bool IsAllowToOrder { get; set; }
+
+        public int? StockQuantity { get; set; }
+
+        public int ReviewsCount { get; set; }
+
+        public double? RatingAverage { get; set; }
 
         public bool HasVariation => Variations.Any();
 
@@ -44,6 +53,8 @@ namespace SimplCommerce.Module.Catalog.ViewModels
             }
         }
 
+        public IDictionary<string, ProductOptionDisplay> OptionDisplayValues { get; set; } = new Dictionary<string, ProductOptionDisplay>();
+
         public IList<MediaViewModel> Images { get; set; } = new List<MediaViewModel>();
 
         public IList<ProductDetailVariation> Variations { get; set; } = new List<ProductDetailVariation>();
@@ -51,5 +62,9 @@ namespace SimplCommerce.Module.Catalog.ViewModels
         public IList<ProductDetailAttribute> Attributes { get; set; } = new List<ProductDetailAttribute>();
 
         public IList<ProductDetailCategory> Categories { get; set; } = new List<ProductDetailCategory>();
+
+        public IList<ProductThumbnail> RelatedProducts { get; set; } = new List<ProductThumbnail>();
+
+        public IList<ProductThumbnail> CrossSellProducts { get; set; } = new List<ProductThumbnail>();
     }
 }

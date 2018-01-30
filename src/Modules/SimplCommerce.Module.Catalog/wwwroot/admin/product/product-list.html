@@ -1,23 +1,27 @@
 ﻿<div class="page-header">
     <div class="row">
         <div class="col-md-8">
-            <h2>Product List</h2>
+            <h2>{{::vm.translate.get('Products')}}</h2>
         </div>
         <div class="col-md-4 text-right">
-            <a ui-sref="product-create" class="btn btn-primary"><span class="glyphicon glyphicon-plus"></span> Create Product</a>
+            <a ui-sref="product-create" class="btn btn-primary"><span class="glyphicon glyphicon-plus"></span>{{::vm.translate.get('Create Product')}}</a>
         </div>
     </div>
 </div>
 
-<table class="table" st-pipe="vm.getProducts" st-table="vm.products">
+<table class="table table-striped" st-pipe="vm.getProducts" st-table="vm.products">
     <thead>
         <tr>
-            <th st-sort="Name" class="sortable">Email</th>
-            <th>Has Options</th>
-            <th>Is Visible Individually</th>
-            <th st-sort="IsPublished" class="sortable">IsPublished</th>
-            <th st-sort="CreatedOn" class="sortable">CreatedOn</th>
-            <th>Actions</th>
+            <th st-sort="Name" class="sortable">{{::vm.translate.get('Name')}}</th>
+            <th class="text-center">{{::vm.translate.get('Has Options')}}</th>
+            <th class="text-center">{{::vm.translate.get('Is Visible Individually')}}</th>
+            <th class="text-center">{{::vm.translate.get('Is Featured')}}</th>
+            <th class="text-center">{{::vm.translate.get('Is Allowed To Order')}}</th>
+            <th class="text-center">{{::vm.translate.get('Is Called For Pricing')}}</th>
+            <th class="text-right">{{::vm.translate.get('Stock Quantity')}}</th>
+            <th st-sort="IsPublished" class="text-center sortable">{{::vm.translate.get('Is Published')}}</th>
+            <th st-sort="CreatedOn" class="text-center sortable">{{::vm.translate.get('Created On')}}</th>
+            <th class="text-center">{{::vm.translate.get('Actions')}}</th>
         </tr>
         <tr>
             <th>
@@ -28,27 +32,31 @@
             <th>
                 <div class="form-group">
                     <select class="form-control" st-search="HasOptions">
-                        <option value="">All</option>
-                        <option value="false">Don't have options</option>
-                        <option value="true">Has options</option>
+                        <option value="">{{::vm.translate.get('All')}}</option>
+                        <option value="true">{{::vm.translate.get('Yes')}}</option>
+                        <option value="false">{{::vm.translate.get('No')}}</option>
                     </select>
                 </div>
             </th>
             <th>
                 <div class="form-group">
                     <select class="form-control" st-search="IsVisibleIndividually">
-                        <option value="">All</option>
-                        <option value="false">Not visible Individually</option>
-                        <option value="true">Visible Individually</option>
+                        <option value="">{{::vm.translate.get('All')}}</option>
+                        <option value="true">{{::vm.translate.get('Yes')}}</option>
+                        <option value="false">{{::vm.translate.get('No')}}</option>
                     </select>
                 </div>
             </th>
+            <th></th>
+            <th></th>
+            <th></th>
+            <th></th>
             <th>
                 <div class="form-group">
                     <select class="form-control" st-search="IsPublished">
-                        <option value="">All</option>
-                        <option value="false">Not Published</option>
-                        <option value="true">Published</option>
+                        <option value="">{{::vm.translate.get('All')}}</option>
+                        <option value="true">{{::vm.translate.get('Yes')}}</option>
+                        <option value="false">{{::vm.translate.get('No')}}</option>
                     </select>
                 </div>
             </th>
@@ -59,11 +67,15 @@
     <tbody ng-show="!vm.isLoading">
         <tr ng-repeat="product in vm.products">
             <td>{{product.name}}</td>
-            <td><span ng-if="product.hasOptions" class="glyphicon glyphicon-ok"></span></td>
-            <td><span ng-if="product.isVisibleIndividually" class="glyphicon glyphicon-ok"></span></td>
-            <td><span ng-if="product.isPublished" class="glyphicon glyphicon-ok"></span></td>
-            <td>{{product.createdOn | date:'medium' }}</td>
-            <td>
+            <td class="text-center"><i ng-attr-class="{{product.hasOptions && 'fa fa-circle' || 'fa fa-circle-o'}}"></i></td>
+            <td class="text-center"><i ng-attr-class="{{product.isVisibleIndividually && 'fa fa-circle' || 'fa fa-circle-o'}}"></i></td>
+            <td class="text-center"><i ng-attr-class="{{product.isFeatured && 'fa fa-circle' || 'fa fa-circle-o'}}"></i></td>
+            <td class="text-center"><i ng-attr-class="{{product.isAllowToOrder && 'fa fa-circle' || 'fa fa-circle-o'}}"></i></td>
+            <td class="text-center"><i ng-attr-class="{{product.isCallForPricing && 'fa fa-circle' || 'fa fa-circle-o'}}"></i></td>
+            <td class="text-right">{{product.stockQuantity}}</td>
+            <td class="text-center"><i ng-attr-class="{{product.isPublished && 'fa fa-circle' || 'fa fa-circle-o'}}"></i></td>
+            <td class="text-center">{{product.createdOn | date:'medium'}}</td>
+            <td class="text-center">
                 <button ng-if="product.isPublished" title="Un Publish" ng-click="vm.changeStatus(product)" class="btn btn-primary btn-xs"> <span class="glyphicon glyphicon-pause"></span></button>
                 <button ng-if="!product.isPublished" title="Publish" ng-click="vm.changeStatus(product)" class="btn btn-primary btn-xs"> <span class="glyphicon glyphicon-play"></span></button>
                 <a ui-sref="product-edit({id: product.id})" title="Edit" class="btn btn-primary btn-xs"> <span class="glyphicon glyphicon-pencil"></span></a>
@@ -73,12 +85,12 @@
     </tbody>
     <tbody ng-show="vm.isLoading">
         <tr>
-            <td colspan="6" class="text-center">Loading ... </td>
+            <td colspan="10" class="text-center">Loading ... </td>
         </tr>
     </tbody>
     <tfoot>
         <tr>
-            <td class="text-center" st-pagination="" st-items-by-page="50" st-displayed-pages="10" colspan="6"></td>
+            <td class="text-center" st-pagination="" st-items-by-page="50" st-displayed-pages="10" colspan="10"></td>
         </tr>
     </tfoot>
 </table>

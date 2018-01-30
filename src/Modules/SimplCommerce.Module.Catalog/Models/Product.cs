@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using SimplCommerce.Module.Core.Models;
+using SimplCommerce.Module.Tax.Models;
 
 namespace SimplCommerce.Module.Catalog.Models
 {
@@ -16,17 +17,31 @@ namespace SimplCommerce.Module.Catalog.Models
 
         public decimal? OldPrice { get; set; }
 
+        public decimal? SpecialPrice { get; set; }
+
+        public DateTimeOffset? SpecialPriceStart { get; set; }
+
+        public DateTimeOffset? SpecialPriceEnd { get; set; }
+
         public bool HasOptions { get; set; }
 
         public bool IsVisibleIndividually { get; set; }
 
         public bool IsFeatured { get; set; }
 
+        public bool IsCallForPricing { get; set; }
+
+        public bool IsAllowToOrder { get; set; }
+
+        public int StockQuantity { get; set; }
+
         public string Sku { get; set; }
 
         public string NormalizedName { get; set; }
 
         public int DisplayOrder { get; set; }
+
+        public long? VendorId { get; set; }
 
         public Media ThumbnailImage { get; set; }
 
@@ -49,6 +64,10 @@ namespace SimplCommerce.Module.Catalog.Models
         public long? BrandId { get; set; }
 
         public Brand Brand { get; set; }
+
+        public long? TaxClassId { get; set; }
+
+        public TaxClass TaxClass { get; set; }
 
         public void AddCategory(ProductCategory category)
         {
@@ -108,7 +127,11 @@ namespace SimplCommerce.Module.Catalog.Models
             product.PublishedOn = DateTimeOffset.Now;
             product.Price = Price;
             product.OldPrice = OldPrice;
+            product.IsAllowToOrder = IsAllowToOrder;
+            product.IsCallForPricing = IsCallForPricing;
+            product.StockQuantity = StockQuantity;
             product.BrandId = BrandId;
+            product.VendorId = VendorId;
 
             foreach (var attribute in AttributeValues)
             {

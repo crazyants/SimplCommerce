@@ -1,4 +1,4 @@
-﻿@model SimplCommerce.Module.Catalog.ViewModels.ProductDetail
+@model SimplCommerce.Module.Catalog.ViewModels.ProductDetail
 
 @{
     ViewBag.Title = Model.Name;
@@ -6,8 +6,8 @@
 
 @section head
 {
-    <link href="~/lib/smoothproducts/css/smoothproducts.css" rel="stylesheet" />
-    <link href="~/css/product-detail.css" rel="stylesheet" />
+    <link simpl-append-version="true" rel="stylesheet" href="~/lib/smoothproducts/css/smoothproducts.css" />
+    <link simpl-append-version="true" rel="stylesheet" href="~/modules/catalog/product-detail.css" />
 }
 
 <div>
@@ -38,50 +38,15 @@
                 <h1 class="">@Model.Name</h1>
             </div>
             <ul class="list-inline product-ratings">
-                <li><i class="rating-selected fa fa-star"></i></li>
-                <li><i class="rating-selected fa fa-star"></i></li>
-                <li><i class="rating-selected fa fa-star"></i></li>
-                <li><i class="rating fa fa-star"></i></li>
-                <li><i class="rating fa fa-star"></i></li>
+                <li><input value="@Model.RatingAverage" readonly="readonly" class="rating-loading" step="1" data-size="xs" data-show-clear="false" data-show-caption="false" /></li>
                 <li class="product-review-list">
-                    <span>(1) <a href="#">Review</a> | <a href="#"> Add Review</a></span>
+                    <span>(@Model.ReviewsCount) <a href="#reviews">@Localizer["reviews"]</a> | <a href="#addreview"> @Localizer["Add Review"]</a></span>
                 </li>
             </ul>
             <div class="product-short-desc">@Html.Raw(Model.ShortDescription)</div>
-            <form>
-                <div class="product-price">
-                    @if (Model.HasVariation)
-                    {
-                        foreach (var variant in Model.Variations)
-                        {
-                            var hidden = variant != Model.Variations.First() ? "collapse" : "";
-                            <div class="variation-price @variant.NormalizedName @hidden">
-                                <h3>@variant.Price.ToString("C")</h3>
-                                @if (variant.OldPrice.HasValue && variant.OldPrice.Value > variant.Price)
-                                {
-                                    <p class="product-price-regular">@variant.OldPrice.Value.ToString("c")</p>
-                                    <p class="product-price-saving">You save @((variant.Price - variant.OldPrice.Value).ToString("C")) (-@(100 - Math.Round((variant.Price / variant.OldPrice.Value) * 100, 0))%)</p>
-                                }
-                                <input type="hidden" name="@(variant.NormalizedName)Id" value="@variant.Id" />
-                            </div>
-                        }
-
-                        <input type="hidden" name="productId" value="@Model.Variations.First().Id" />
-                    }
-                    else
-                    {
-                        <input type="hidden" name="productId" value="@Model.Id" />
-                        <h3>@Model.Price.ToString("C")</h3>
-                        if (Model.OldPrice.HasValue && Model.OldPrice.Value > Model.Price)
-                        {
-                            <p class="product-price-regular">@Model.OldPrice.Value.ToString("c")</p>
-                            <p class="product-price-saving">You save @((Model.Price - Model.OldPrice.Value).ToString("C")) (-@(100 - Math.Round((Model.Price / Model.OldPrice.Value) * 100, 0))%)</p>
-                        }
-                    }
-                </div>
-
-                @if (Model.HasVariation)
-                {
+            @if (Model.HasVariation)
+            {
+                <form>
                     <div class="product-attrs">
                         @foreach (var option in Model.AvailableOptions)
                         {
@@ -93,36 +58,130 @@
                                         var shouldChecked = Model.Variations.First().Options.Any(x => x.Value == value);
                                         <li>
                                             <input type="radio" value="@value" checked="@shouldChecked" name="@option.OptionName" />
-                                            <label>@value</label>
+                                            @if (Model.OptionDisplayValues.ContainsKey(value) && !String.IsNullOrWhiteSpace(Model.OptionDisplayValues[value].Value))
+                                            {
+                                                if (Model.OptionDisplayValues[value].DisplayType == "color")
+                                                {
+                                                    <label title="@value" class="color" style="background-color:@Model.OptionDisplayValues[value].Value"></label>
+                                                }
+                                                else
+                                                {
+                                                    <label>@Model.OptionDisplayValues[value].Value</label>
+                                                }
+                                            }
+                                            else
+                                            {
+                                                <label>@value</label>
+                                            }
                                         </li>
                                     }
                                 </ul>
                             </div>
                         }
                     </div>
+                </form>
+
+                foreach (var variant in Model.Variations)
+                {
+                    var hidden = variant != Model.Variations.First() ? "collapse" : "";
+                    <div class="product-variation @hidden" data-variation-name="@variant.NormalizedName">
+                        <div class="product-price">
+                            @if (variant.IsCallForPricing)
+                            {
+                                <span class="label label-info">@Localizer["Call for pricing"]</span>
+                            }
+                            else
+                            {
+                                <h3>@variant.CalculatedProductPrice.Price.ToString("C")</h3>
+                                if (variant.CalculatedProductPrice.PercentOfSaving > 0)
+                                {
+                                    <p class="product-price-regular">@variant.CalculatedProductPrice.OldPrice.Value.ToString("C")</p>
+                                    <p class="product-price-saving">You save (@(variant.CalculatedProductPrice.PercentOfSaving)%)</p>
+                                }
+                            }
+                        </div>
+                        @if (variant.StockQuantity <= 0)
+                        {
+                            <div class="out-of-stock">
+                                <span class="label label-danger">@Localizer["Out of stock"]</span>
+                            </div>
+                        }
+                        <div class="add-to-cart">
+                            <form class="inline">
+                                <input type="hidden" name="productId" value="@variant.Id" />
+                                <div class="product-quantity">
+                                    <button type="button" class="quantity-button" name="subtract" value="-">-</button>
+                                    <input type="text" class="quantity-field" readonly="readonly" name="qty" value="1">
+                                    <button type="button" class="quantity-button" name="add" value="+">+</button>
+                                </div>
+                                <button type="button" disabled="@(!variant.IsAllowToOrder || variant.StockQuantity <= 0)" class="btn btn-lg btn-add-cart">@Localizer["Add to cart"]</button>
+                                <div>
+                                    <ul class="list-inline add-to-wishlist">
+                                        @*<li class="wishlist-in">
+                                            <i class="fa fa-heart"></i>
+                                            <a href="#">Add to Wishlist</a>
+                                        </li>*@
+                                        <li class="compare-in">
+                                            <i class="fa fa-exchange"></i>
+                                            <a href="#" class="add-to-comparison">Add to Compare</a>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                }
+                <div class="product-variation-notavailable collapse">
+                    <span class="label label-danger">Not available</span>
+                </div>
+            }
+            else
+            {
+                <div class="product-price">
+                    @if (Model.IsCallForPricing)
+                    {
+                        <span class="label label-info">@Localizer["Call for pricing"]</span>
+                    }
+                    else
+                    {
+                        <h3>@Model.CalculatedProductPrice.Price.ToString("C")</h3>
+                        if (Model.CalculatedProductPrice.PercentOfSaving > 0)
+                        {
+                            <p class="product-price-regular">@Model.CalculatedProductPrice.OldPrice.Value.ToString("C")</p>
+                            <p class="product-price-saving">You save (@(Model.CalculatedProductPrice.PercentOfSaving)%)</p>
+                        }
+                    }
+                </div>
+                if (Model.StockQuantity <= 0)
+                {
+                    <div class="out-of-stock">
+                        <span class="label label-danger">@Localizer["Out of stock"]</span>
+                    </div>
                 }
                 <div class="add-to-cart">
-                    <div class="product-quantity">
-                        <button type="button" class="quantity-button" name="subtract" value="-">-</button>
-                        <input type="text" class="quantity-field" readonly="readonly" name="qty" value="1">
-                        <button type="button" class="quantity-button" name="add" value="+">+</button>
-                    </div>
-
-                    <button type="button" class="btn btn-lg btn-add-cart">@Localizer["Add to cart"]</button>
+                    <form class="inline">
+                        <input type="hidden" name="productId" value="@Model.Id" />
+                        <div class="product-quantity">
+                            <button type="button" class="quantity-button" name="subtract" value="-">-</button>
+                            <input type="text" class="quantity-field" readonly="readonly" name="qty" value="1">
+                            <button type="button" class="quantity-button" name="add" value="+">+</button>
+                        </div>
+                        <button type="button" disabled="@(!Model.IsAllowToOrder || Model.StockQuantity <= 0)" class="btn btn-lg btn-add-cart">@Localizer["Add to cart"]</button>
+                        <div>
+                            <ul class="list-inline add-to-wishlist">
+                                @*<li class="wishlist-in">
+                                    <i class="fa fa-heart"></i>
+                                    <a href="#">Add to Wishlist</a>
+                                </li>*@
+                                <li class="compare-in">
+                                    <i class="fa fa-exchange"></i>
+                                    <a href="#" class="add-to-comparison">Add to Compare</a>
+                                </li>
+                            </ul>
+                        </div>
+                    </form>
                 </div>
-            </form>
-            <div>
-                <ul class="list-inline add-to-wishlist">
-                    <li class="wishlist-in">
-                        <i class="fa fa-heart"></i>
-                        <a href="#">Add to Wishlist</a>
-                    </li>
-                    <li class="compare-in">
-                        <i class="fa fa-exchange"></i>
-                        <a href="#">Add to Compare</a>
-                    </li>
-                </ul>
-            </div>
+            }
         </div>
     </div>
     @if (!string.IsNullOrWhiteSpace(Model.Description))
@@ -155,15 +214,44 @@
             </table>
         </div>
     }
-    <div>
-        <h3>Customer Reviews</h3>
-        @await Component.InvokeAsync("Review", new { entityId = Model.Id, entityTypeId = (long)3 })
-    </div>
 </div>
+
+@if (Model.RelatedProducts.Any()) {
+    <h2 class="page-header">Related Products</h2>
+    <div class="row product-list">
+        @foreach (var product in Model.RelatedProducts)
+        {
+            <div class="col-xs-6 col-md-3">
+                @await Html.PartialAsync("_ProductThumbnail", product)
+            </div>
+        }
+    </div>
+}
+
+@if (Model.CrossSellProducts.Any())
+{
+    <h2 class="page-header">Cross-sell Products</h2>
+    <div class="row product-list">
+        @foreach (var product in Model.CrossSellProducts)
+        {
+            <div class="col-xs-6 col-md-3">
+                @await Html.PartialAsync("_ProductThumbnail", product)
+            </div>
+        }
+    </div>
+}
+
+@await Component.InvokeAsync("ProductRecentlyViewed", new { productId = Model.Id })
+
+<div>
+    <h3>@Localizer["Customer reviews"]</h3>
+    @await Component.InvokeAsync("Review", new { entityId = Model.Id, entityTypeId = (long)3 })
+</div>
+
 
 @section scripts
 {
     @{ await Html.RenderPartialAsync("_ValidationScriptsPartial"); }
-    <script src="~/lib/smoothproducts/js/smoothproducts.js"></script>
-    <script src="~/catalog/product-detail.js"></script>
+    <script simpl-append-version="true" src="~/lib/smoothproducts/js/smoothproducts.js"></script>
+    <script simpl-append-version="true" src="~/modules/catalog/product-detail.js"></script>
 }

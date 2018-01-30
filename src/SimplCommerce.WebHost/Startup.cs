@@ -1,17 +1,12 @@
 ﻿using System;
-using System.Collections.Generic;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Razor;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Localization;
-using Microsoft.Extensions.Logging;
 using SimplCommerce.Infrastructure;
 using SimplCommerce.Infrastructure.Web;
-using SimplCommerce.Module.Core.Extensions;
-using SimplCommerce.Module.Core.Models;
 using SimplCommerce.Module.Localization;
 using SimplCommerce.WebHost.Extensions;
 
@@ -20,62 +15,65 @@ namespace SimplCommerce.WebHost
     public class Startup
     {
         private readonly IHostingEnvironment _hostingEnvironment;
+        private readonly IConfiguration _configuration;
 
-        private static readonly IList<ModuleInfo> Modules = new List<ModuleInfo>();
-
-        public Startup(IHostingEnvironment env)
+        public Startup(IConfiguration configuration, IHostingEnvironment hostingEnvironment)
         {
-            _hostingEnvironment = env;
-
-            var builder = new ConfigurationBuilder()
-                .SetBasePath(env.ContentRootPath)
-                .AddJsonFile("appsettings.json", true, true)
-                .AddJsonFile($"appsettings.{env.EnvironmentName}.json", true);
-
-            if (env.IsDevelopment())
-            {
-                builder.AddUserSecrets();
-            }
-
-            builder.AddEnvironmentVariables();
-            Configuration = builder.Build();
+            _configuration = configuration;
+            _hostingEnvironment = hostingEnvironment;
         }
-
-        private IConfigurationRoot Configuration { get; }
 
         public IServiceProvider ConfigureServices(IServiceCollection services)
         {
             GlobalConfiguration.WebRootPath = _hostingEnvironment.WebRootPath;
             GlobalConfiguration.ContentRootPath = _hostingEnvironment.ContentRootPath;
-            services.LoadInstalledModules(Modules, _hostingEnvironment);
+            services.LoadInstalledModules(_hostingEnvironment.ContentRootPath);
 
-            services.AddCustomizedDataStore(Configuration);
+            services.AddCustomizedDataStore(_configuration);
             services.AddCustomizedIdentity();
 
             services.AddSingleton<IStringLocalizerFactory, EfStringLocalizerFactory>();
-            services.AddScoped<SignInManager<User>, SimplSignInManager<User>>();
+            services.AddCloudscribePagination();
 
             services.Configure<RazorViewEngineOptions>(
                 options => { options.ViewLocationExpanders.Add(new ModuleViewLocationExpander()); });
 
             services.AddCustomizedMvc(GlobalConfiguration.Modules);
-            return services.Build(Configuration, _hostingEnvironment);
+
+            var sp = services.BuildServiceProvider();
+            var moduleInitializers = sp.GetServices<IModuleInitializer>();
+            foreach (var moduleInitializer in moduleInitializers)
+            {
+                moduleInitializer.ConfigureServices(services);
+            }
+
+            return services.Build(_configuration, _hostingEnvironment);
         }
 
-        public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggerFactory loggerFactory)
+        public void Configure(IApplicationBuilder app, IHostingEnvironment env)
         {
-            loggerFactory.AddConsole();
-
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
+                app.UseDatabaseErrorPage();
+            }
+            else
+            {
+                app.UseExceptionHandler("/Home/Error");
             }
 
+            app.UseStatusCodePagesWithReExecute("/Home/ErrorWithCode/{0}");
+
             app.UseCustomizedRequestLocalization();
-            app.UseCustomizedStaticFiles(Modules);
+            app.UseCustomizedStaticFiles(env);
             app.UseCustomizedIdentity();
             app.UseCustomizedMvc();
-        }
 
+            var moduleInitializers = app.ApplicationServices.GetServices<IModuleInitializer>();
+            foreach (var moduleInitializer in moduleInitializers)
+            {
+                moduleInitializer.Configure(app, env);
+            }
+        }
     }
 }

@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
 namespace SimplCommerce.Module.Catalog.ViewModels
@@ -8,6 +9,9 @@ namespace SimplCommerce.Module.Catalog.ViewModels
         public ProductVm()
         {
             IsPublished = true;
+            IsCallForPricing = false;
+            IsAllowToOrder = true;
+            Price = 0;
         }
 
         public long Id { get; set; }
@@ -16,8 +20,21 @@ namespace SimplCommerce.Module.Catalog.ViewModels
 
         public decimal? OldPrice { get; set; }
 
+        public decimal? SpecialPrice { get; set; }
+
+        public DateTimeOffset? SpecialPriceStart { get; set; }
+
+        public DateTimeOffset? SpecialPriceEnd { get; set; }
+
+        public bool IsCallForPricing { get; set; }
+
+        public bool IsAllowToOrder { get; set; }
+
         [Required]
         public string Name { get; set; }
+
+        [Required]
+        public string Slug { get; set; }
 
         public string ShortDescription { get; set; }
 
@@ -39,10 +56,18 @@ namespace SimplCommerce.Module.Catalog.ViewModels
 
         public string ThumbnailImageUrl { get; set; }
 
-        public IList<ProductMediaVm> ProductMedias { get; set; } = new List<ProductMediaVm>();
+        public IList<ProductMediaVm> ProductImages { get; set; } = new List<ProductMediaVm>();
+
+        public IList<ProductMediaVm> ProductDocuments { get; set; } = new List<ProductMediaVm>();
 
         public IList<long> DeletedMediaIds { get; set; } = new List<long>();
 
         public long? BrandId { get; set; }
+
+        public long? TaxClassId { get; set; }
+
+        public List<ProductLinkVm> RelatedProducts { get; set; } = new List<ProductLinkVm>();
+
+        public List<ProductLinkVm> CrossSellProducts { get; set; } = new List<ProductLinkVm>();
     }
 }

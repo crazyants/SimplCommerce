@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System.Threading.Tasks;
+using System.Collections.Generic;
 using SimplCommerce.Module.Catalog.Models;
 using SimplCommerce.Module.Catalog.ViewModels;
 
@@ -6,12 +7,12 @@ namespace SimplCommerce.Module.Catalog.Services
 {
     public interface ICategoryService
     {
-        IList<CategoryListItem> GetAll();
+        Task<IList<CategoryListItem>> GetAll();
 
-        void Create(Category category);
+        Task Create(Category category);
 
-        void Update(Category category);
+        Task Update(Category category);
 
-        void Delete(Category category);
+        Task Delete(Category category);
     }
 }

@@ -1,5 +1,6 @@
-﻿@using System.Threading.Tasks
+@using System.Threading.Tasks
 @using SimplCommerce.Module.Catalog.ViewModels
+@addTagHelper *, SimplCommerce.Infrastructure
 
 @model ProductsByCategory
 @{
@@ -7,7 +8,7 @@
 }
 
 @section head {
-    <link href="~/lib/nouislider/nouislider.min.css" rel="stylesheet" />
+    <link simpl-append-version="true" rel="stylesheet" href="~/lib/nouislider/nouislider.min.css"/>
 }
 
 <div>
@@ -22,14 +23,14 @@
 </div>
 <div class="row">
     <div class="col-md-3 product-list-filters">
-        <h3>Filter by</h3>
+        <h3>@Localizer["Filter by"]</h3>
         <form id="productFilter" name="productFilter" method="GET" action="~/@Model.CategorySeoTitle">
             <div class="panel-group" id="accordion-brand">
                 <div class="panel panel-default">
                     <div class="panel-heading">
                         <h2 class="panel-title">
                             <a data-toggle="collapse" data-parent="#accordion-brand" href="#collapse-brand">
-                                Brands
+                                @Localizer["Brand"]
                                 <i class="fa fa-angle-down"></i>
                             </a>
                         </h2>
@@ -58,7 +59,7 @@
                     <div class="panel-heading">
                         <h2 class="panel-title">
                             <a data-toggle="collapse" data-parent="#accordion-price" href="#collapse-price">
-                                Price
+                                @Localizer["Price"]
                                 <i class="fa fa-angle-down"></i>
                             </a>
                         </h2>
@@ -87,7 +88,7 @@
         <div class="row">
             <div class="col-sm-6 category-result">
                 <h2>@Model.CategoryName</h2>
-                <small class="badge-results">@Model.TotalProduct Results</small>
+                <small class="badge-results">@Model.TotalProduct @Localizer["results"]</small>
             </div>
             <div class="col-sm-6">
                 <ul class="list-inline clear-both product-list-display-options">
@@ -96,7 +97,7 @@
                         <a href="#"><i class="fa fa-th"></i></a>
                     </li>
                     <li class="sort-by">
-                        <label>Sort By :</label>
+                        <label>@Localizer["Sort by:"]</label>
                         <div class="btn-group">
                             <select asp-for="CurrentSearchOption.Sort" asp-items="Model.AvailableSortOptions" class="form-control"></select>
                         </div>
@@ -125,12 +126,22 @@
                 </div>
             }
         </div>
+        <div class="row">
+            <div class="col-md-12 text-right">
+                <cs-pager cs-paging-pagesize="@Model.CurrentSearchOption.PageSize"
+                          cs-paging-pagenumber="@Model.CurrentSearchOption.Page"
+                          cs-paging-totalitems="@Model.TotalProduct"
+                          cs-pagenumber-param="page"
+                          asp-basehref="~/@Model.CategorySeoTitle"
+                          asp-all-route-data="@Model.CurrentSearchOption.ToDictionary()"></cs-pager>
+            </div>
+        </div>
     </div>
 </div>
 
 @section scripts {
-    <script src="~/lib/wnumb/wNumb.js"></script>
-    <script src="~/lib/nouislider/nouislider.min.js"></script>
+    <script simpl-append-version="true" src="~/lib/wnumb/wNumb.js"></script>
+    <script simpl-append-version="true" src="~/lib/nouislider/nouislider.min.js"></script>
 
     <script>
         var productFilter = {};
@@ -142,5 +153,5 @@
             currentMax: @((Model.CurrentSearchOption.MaxPrice ?? Model.FilterOption.Price.MaxPrice).ToString("F0"))
         };
     </script>
-    <script src="~/catalog/product-filter.js"></script>
+    <script simpl-append-version="true" src="~/modules/catalog/product-filter.js"></script>
 }

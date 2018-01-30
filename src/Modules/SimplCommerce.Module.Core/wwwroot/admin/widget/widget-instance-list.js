@@ -5,8 +5,9 @@
         .controller('WidgetInstanceListCtrl', WidgetInstanceListCtrl);
 
     /* @ngInject */
-    function WidgetInstanceListCtrl(widgetService) {
+    function WidgetInstanceListCtrl(widgetService, translateService) {
         var vm = this;
+        vm.translate = translateService;
         vm.widgets = [];
         vm.widgetInstances = [];
 
@@ -16,10 +17,10 @@
                     widgetService.deleteWidgetInstance(widgetInstance.id)
                        .then(function (result) {
                            getWidgetInstances();
-                           toastr.success(widgetInstance.name + ' has been deleted')
+                           toastr.success(widgetInstance.name + ' has been deleted');
                        })
-                       .catch(function (error) {
-                           toastr.error(error.data.error);
+                        .catch(function (response) {
+                            toastr.error(response.data.error);
                        });
                 }
             });

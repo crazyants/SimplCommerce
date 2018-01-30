@@ -5,17 +5,22 @@
         .controller('PageFormCtrl', PageFormCtrl);
 
     /* @ngInject */
-    function PageFormCtrl($state, $stateParams, summerNoteService, pageService) {
+    function PageFormCtrl($state, $stateParams, summerNoteService, pageService, translateService) {
         var vm = this;
+        vm.translate = translateService;
         vm.page = {};
         vm.pageId = $stateParams.id;
         vm.isEditMode = vm.pageId > 0;
 
         vm.imageUpload = function (files) {
             summerNoteService.upload(files[0])
-                .success(function (url) {
-                    $(vm.body).summernote('insertImage', url);
+                .then(function (response) {
+                    $(vm.body).summernote('insertImage', response.data);
                 });
+        };
+
+        vm.updateSlug = function () {
+            vm.page.slug = slugify(vm.page.name);
         };
 
         vm.save = function save() {
@@ -27,17 +32,18 @@
             }
 
             promise
-                .success(function (result) {
+                .then(function (result) {
                     $state.go('page');
                 })
-                .error(function (error) {
+                .catch(function (response) {
+                    var error = response.data;
                     vm.validationErrors = [];
                     if (error && angular.isObject(error)) {
                         for (var key in error) {
                             vm.validationErrors.push(error[key][0]);
                         }
                     } else {
-                        vm.validationErrors.push('Could not add page.');
+                        vm.validationErrors.push('Could not add or update page.');
                     }
                 });
         };

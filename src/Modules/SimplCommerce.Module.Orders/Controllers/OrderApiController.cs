@@ -1,32 +1,37 @@
 ﻿using System;
 using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using MediatR;
 using SimplCommerce.Infrastructure;
 using SimplCommerce.Infrastructure.Data;
 using SimplCommerce.Infrastructure.Web.SmartTable;
-using SimplCommerce.Module.Core.Services;
 using SimplCommerce.Module.Orders.Models;
 using SimplCommerce.Module.Orders.ViewModels;
+using SimplCommerce.Module.Core.Extensions;
+using SimplCommerce.Module.Orders.Events;
 
 namespace SimplCommerce.Module.Orders.Controllers
 {
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "admin, vendor")]
     [Route("api/orders")]
     public class OrderApiController : Controller
     {
-        private readonly IMediaService _mediaService;
         private readonly IRepository<Order> _orderRepository;
+        private readonly IWorkContext _workContext;
+        private readonly IMediator _mediator;
 
-        public OrderApiController(IRepository<Order> orderRepository, IMediaService mediaService)
+        public OrderApiController(IRepository<Order> orderRepository, IWorkContext workContext, IMediator mediator)
         {
             _orderRepository = orderRepository;
-            _mediaService = mediaService;
+            _workContext = workContext;
+            _mediator = mediator;
         }
 
         [HttpGet]
-        public ActionResult Get(int status, int numRecords)
+        public async Task<ActionResult> Get(int status, int numRecords)
         {
             var orderStatus = (OrderStatus) status;
             if ((numRecords <= 0) || (numRecords > 100))
@@ -34,16 +39,26 @@ namespace SimplCommerce.Module.Orders.Controllers
                 numRecords = 5;
             }
 
-            var model = _orderRepository
-                .Query()
-                .Include(x => x.CreatedBy)
-                .Where(x => x.OrderStatus == orderStatus)
-                .OrderByDescending(x => x.CreatedOn)
+            var query = _orderRepository.Query();
+            if(orderStatus != 0)
+            {
+                query = query.Where(x => x.OrderStatus == orderStatus);
+            }
+
+            var currentUser = await _workContext.GetCurrentUser();
+            if (!User.IsInRole("admin"))
+            {
+                query = query.Where(x => x.VendorId == currentUser.VendorId);
+            }
+
+            var model = query.OrderByDescending(x => x.CreatedOn)
                 .Take(numRecords)
                 .Select(x => new
                 {
                     x.Id,
-                    CustomerName = x.CreatedBy.FullName, x.SubTotal,
+                    CustomerName = x.CreatedBy.FullName,
+                    x.OrderTotal,
+                    OrderTotalString = x.OrderTotal.ToString("C"),
                     OrderStatus = x.OrderStatus.ToString(), x.CreatedOn
                 });
 
@@ -51,11 +66,16 @@ namespace SimplCommerce.Module.Orders.Controllers
         }
 
         [HttpPost("grid")]
-        public ActionResult List([FromBody] SmartTableParam param)
+        public async Task<ActionResult> List([FromBody] SmartTableParam param)
         {
             IQueryable<Order> query = _orderRepository
-                .Query()
-                .Include(x => x.CreatedBy);
+                .Query();
+
+            var currentUser = await _workContext.GetCurrentUser();
+            if (!User.IsInRole("admin"))
+            {
+                query = query.Where(x => x.VendorId == currentUser.VendorId);
+            }
 
             if (param.Search.PredicateObject != null)
             {
@@ -83,14 +103,12 @@ namespace SimplCommerce.Module.Orders.Controllers
                     if (search.CreatedOn.before != null)
                     {
                         DateTimeOffset before = search.CreatedOn.before;
-                        before = before.Date.AddDays(1);
                         query = query.Where(x => x.CreatedOn <= before);
                     }
 
                     if (search.CreatedOn.after != null)
                     {
                         DateTimeOffset after = search.CreatedOn.after;
-                        after = after.Date;
                         query = query.Where(x => x.CreatedOn >= after);
                     }
                 }
@@ -109,11 +127,13 @@ namespace SimplCommerce.Module.Orders.Controllers
         }
 
         [HttpGet("{id}")]
-        public IActionResult Get(long id)
+        public async Task<IActionResult> Get(long id)
         {
             var order = _orderRepository
                 .Query()
-                .Include(x => x.ShippingAddress).ThenInclude(x => x.Address).ThenInclude(x => x.District).ThenInclude(x => x.StateOrProvince)
+                .Include(x => x.ShippingAddress).ThenInclude(x => x.District)
+                .Include(x => x.ShippingAddress).ThenInclude(x => x.StateOrProvince)
+                .Include(x => x.ShippingAddress).ThenInclude(x => x.Country)
                 .Include(x => x.OrderItems).ThenInclude(x => x.Product).ThenInclude(x => x.ThumbnailImage)
                 .Include(x => x.OrderItems).ThenInclude(x => x.Product).ThenInclude(x => x.OptionCombinations).ThenInclude(x => x.Option)
                 .Include(x => x.CreatedBy)
@@ -121,7 +141,13 @@ namespace SimplCommerce.Module.Orders.Controllers
 
             if (order == null)
             {
-                return new NotFoundResult();
+                return NotFound();
+            }
+
+            var currentUser = await _workContext.GetCurrentUser();
+            if (!User.IsInRole("admin") && order.VendorId != currentUser.VendorId)
+            {
+                return new BadRequestObjectResult(new { error = "You don't have permission to manage this order" });
             }
 
             var model = new OrderDetailVm
@@ -130,33 +156,46 @@ namespace SimplCommerce.Module.Orders.Controllers
                 CreatedOn = order.CreatedOn,
                 OrderStatus = (int) order.OrderStatus,
                 OrderStatusString = order.OrderStatus.ToString(),
+                CustomerId = order.CreatedById,
                 CustomerName = order.CreatedBy.FullName,
-                SubTotal = order.SubTotal,
+                CustomerEmail = order.CreatedBy.Email,
+                ShippingMethod = order.ShippingMethod,
+                PaymentMethod = order.PaymentMethod,
+                Subtotal = order.SubTotal,
+                DiscountAmount = order.DiscountAmount,
+                SubTotalWithDiscount = order.SubTotalWithDiscount,
+                TaxAmount = order.TaxAmount,
+                ShippingAmount = order.ShippingAmount,
+                OrderTotal = order.OrderTotal,
                 ShippingAddress = new ShippingAddressVm
                 {
-                    AddressLine1 = order.ShippingAddress.Address.AddressLine1,
-                    AddressLine2 = order.ShippingAddress.Address.AddressLine2,
-                    ContactName = order.ShippingAddress.Address.ContactName,
-                    DistrictName = order.ShippingAddress.Address.District.Name,
-                    StateOrProvinceName = order.ShippingAddress.Address.StateOrProvince.Name,
-                    Phone = order.ShippingAddress.Address.Phone
+                    AddressLine1 = order.ShippingAddress.AddressLine1,
+                    AddressLine2 = order.ShippingAddress.AddressLine2,
+                    ContactName = order.ShippingAddress.ContactName,
+                    DistrictName = order.ShippingAddress.District?.Name,
+                    StateOrProvinceName = order.ShippingAddress.StateOrProvince.Name,
+                    Phone = order.ShippingAddress.Phone
                 },
                 OrderItems = order.OrderItems.Select(x => new OrderItemVm
                 {
                     Id = x.Id,
+                    ProductId = x.Product.Id,
                     ProductName = x.Product.Name,
                     ProductPrice = x.ProductPrice,
-                    ProductImage = _mediaService.GetThumbnailUrl(x.Product.ThumbnailImage),
                     Quantity = x.Quantity,
+                    TaxAmount = x.TaxAmount,
+                    TaxPercent = x.TaxPercent,
                     VariationOptions = OrderItemVm.GetVariationOption(x.Product)
                 }).ToList()
             };
+
+            await _mediator.Publish(new OrderDetailGot { OrderDetailVm = model });
 
             return Json(model);
         }
 
         [HttpPost("change-order-status/{id}")]
-        public IActionResult ChangeStatus(long id, [FromBody] int statusId)
+        public async Task<IActionResult> ChangeStatus(long id, [FromBody] OrderStatusForm model)
         {
             var order = _orderRepository.Query().FirstOrDefault(x => x.Id == id);
             if (order == null)
@@ -164,12 +203,32 @@ namespace SimplCommerce.Module.Orders.Controllers
                 return NotFound();
             }
 
-            if (Enum.IsDefined(typeof(OrderStatus), statusId))
+            var currentUser = await _workContext.GetCurrentUser();
+            if (!User.IsInRole("admin") && order.VendorId != currentUser.VendorId)
             {
-                order.OrderStatus = (OrderStatus) statusId;
-                _orderRepository.SaveChange();
-                return Ok();
+                return BadRequest(new { error = "You don't have permission to manage this order" });
             }
+
+            if (Enum.IsDefined(typeof(OrderStatus), model.StatusId))
+            {
+                var oldStatus = order.OrderStatus;
+                order.OrderStatus = (OrderStatus) model.StatusId;
+                await _orderRepository.SaveChangesAsync();
+
+                var orderStatusChanged = new OrderChanged
+                {
+                    OrderId = order.Id,
+                    OldStatus = oldStatus,
+                    NewStatus = order.OrderStatus,
+                    Order = order,
+                    UserId = currentUser.Id,
+                    Note = model.Note
+                };
+
+                await _mediator.Publish(orderStatusChanged);
+                return Accepted();
+            }
+
             return BadRequest(new {Error = "unsupported order status"});
         }
 

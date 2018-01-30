@@ -5,8 +5,9 @@
         .controller('CarouselWidgetFormCtrl', CarouselWidgetFormCtrl);
 
     /* @ngInject */
-    function CarouselWidgetFormCtrl($state, $stateParams, carouselWidgetService) {
+    function CarouselWidgetFormCtrl($state, $stateParams, carouselWidgetService, translateService) {
         var vm = this;
+        vm.translate = translateService;
         vm.widgetInstance = { widgetZoneId: 1, items: [{}], publishStart: new Date() };
         vm.widgetZones = [];
         vm.widgetInstanceId = $stateParams.id;
@@ -14,6 +15,7 @@
 
         vm.datePickerPublishStart = {};
         vm.datePickerPublishEnd = {};
+        vm.numberOfWidgets = [];
 
         vm.openCalendar = function (e, picker) {
             vm[picker].open = true;
@@ -43,10 +45,11 @@
             }
 
             promise
-                .success(function (result) {
+                .then(function (result) {
                     $state.go('widget');
                 })
-                .error(function (error) {
+                .catch(function (response) {
+                    var error = response.data;
                     vm.validationErrors = [];
                     if (error && angular.isObject(error)) {
                         for (var key in error) {
@@ -62,6 +65,16 @@
 
             carouselWidgetService.getWidgetZones().then(function (result) {
                 vm.widgetZones = result.data;
+            });
+
+            carouselWidgetService.getNumberOfWidgets().then(function (result) {
+                var count = parseInt(result.data);
+                if (!vm.isEditMode) {
+                    count = count + 1;
+                }
+
+                for (var i = 1; i <= count; i++)
+                    vm.numberOfWidgets.push(i);
             });
 
             if (vm.isEditMode) {

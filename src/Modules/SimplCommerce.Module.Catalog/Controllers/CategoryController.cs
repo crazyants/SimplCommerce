@@ -3,30 +3,35 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SimplCommerce.Infrastructure.Data;
 using SimplCommerce.Module.Catalog.Models;
+using SimplCommerce.Module.Catalog.Services;
 using SimplCommerce.Module.Catalog.ViewModels;
 using SimplCommerce.Module.Core.Services;
+using Microsoft.Extensions.Configuration;
 
 namespace SimplCommerce.Module.Catalog.Controllers
 {
     public class CategoryController : Controller
     {
+        private int _pageSize;
         private readonly IRepository<Category> _categoryRepository;
         private readonly IMediaService _mediaService;
         private readonly IRepository<Product> _productRepository;
-        private readonly IRepository<ProductCategory> _productCategoryRepository;
         private readonly IRepository<Brand> _brandRepository;
+        private readonly IProductPricingService _productPricingService;
 
         public CategoryController(IRepository<Product> productRepository,
             IMediaService mediaService,
             IRepository<Category> categoryRepository,
-            IRepository<ProductCategory> productCategoryRepository,
-            IRepository<Brand> brandRepository)
+            IRepository<Brand> brandRepository,
+            IProductPricingService productPricingService,
+            IConfiguration config)
         {
             _productRepository = productRepository;
             _mediaService = mediaService;
             _categoryRepository = categoryRepository;
-            _productCategoryRepository = productCategoryRepository;
             _brandRepository = brandRepository;
+            _productPricingService = productPricingService;
+            _pageSize = config.GetValue<int>("Catalog.ProductPageSize");
         }
 
         public IActionResult CategoryDetail(long id, SearchOption searchOption)
@@ -51,8 +56,8 @@ namespace SimplCommerce.Module.Catalog.Controllers
                 .Query()
                 .Where(x => x.Categories.Any(c => c.CategoryId == category.Id) && x.IsPublished && x.IsVisibleIndividually);
 
-            model.FilterOption.Price.MaxPrice = query.Max(x => x.Price);
-            model.FilterOption.Price.MinPrice = query.Min(x => x.Price);
+            model.FilterOption.Price.MaxPrice = query.Select(x => x.Price).DefaultIfEmpty(0).Max();
+            model.FilterOption.Price.MinPrice = query.Select(x => x.Price).DefaultIfEmpty(0).Min();
 
             if (searchOption.MinPrice.HasValue)
             {
@@ -74,6 +79,13 @@ namespace SimplCommerce.Module.Catalog.Controllers
             }
 
             model.TotalProduct = query.Count();
+            var currentPageNum = searchOption.Page <= 0 ? 1 : searchOption.Page;
+            var offset = (_pageSize * currentPageNum) - _pageSize;
+            while (currentPageNum > 1 && offset >= model.TotalProduct)
+            {
+                currentPageNum--;
+                offset = (_pageSize * currentPageNum) - _pageSize;
+            }
 
             query = query
                 .Include(x => x.Brand)
@@ -82,23 +94,20 @@ namespace SimplCommerce.Module.Catalog.Controllers
             query = AppySort(searchOption, query);
 
             var products = query
-                .Select(x => new ProductThumbnail
-                {
-                    Id = x.Id,
-                    Name = x.Name,
-                    SeoTitle = x.SeoTitle,
-                    Price = x.Price,
-                    OldPrice = x.OldPrice,
-                    ThumbnailImage = x.ThumbnailImage,
-                    NumberVariation = x.ProductLinks.Count
-                }).ToList();
+                .Select(x => ProductThumbnail.FromProduct(x))
+                .Skip(offset)
+                .Take(_pageSize)
+                .ToList();
 
             foreach (var product in products)
             {
                 product.ThumbnailUrl = _mediaService.GetThumbnailUrl(product.ThumbnailImage);
+                product.CalculatedProductPrice = _productPricingService.CalculateProductPrice(product);
             }
 
             model.Products = products;
+            model.CurrentSearchOption.PageSize = _pageSize;
+            model.CurrentSearchOption.Page = currentPageNum;
 
             return View(model);
         }

@@ -29,11 +29,9 @@ namespace SimplCommerce.Module.Orders.Controllers
         public async Task<IActionResult> OrderHistoryList()
         {
             var user = await _workContext.GetCurrentUser();
-            var model = _orderRepository
+            var model = await _orderRepository
                 .Query()
-                .Include(x => x.OrderItems).ThenInclude(x => x.Product).ThenInclude(x => x.ThumbnailImage)
-                .Include(x => x.OrderItems).ThenInclude(x => x.Product).ThenInclude(x => x.OptionCombinations).ThenInclude(x => x.Option)
-                .Where(x => x.CreatedById == user.Id)
+                .Where(x => x.CreatedById == user.Id && x.ParentId == null)
                 .Select(x => new OrderHistoryListItem
                 {
                     Id = x.Id,
@@ -49,7 +47,7 @@ namespace SimplCommerce.Module.Orders.Controllers
                         ProductOptions = i.Product.OptionCombinations.Select(o => o.Value)
                     }).ToList()
                 })
-                .OrderByDescending(x => x.CreatedOn).ToList();
+                .OrderByDescending(x => x.CreatedOn).ToListAsync();
 
             foreach (var item in model)
             {

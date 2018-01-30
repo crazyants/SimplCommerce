@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Linq;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SimplCommerce.Infrastructure.Web.SmartTable;
+using SimplCommerce.Module.Core.Events;
 using SimplCommerce.Module.Reviews.Data;
 using SimplCommerce.Module.Reviews.Models;
 
@@ -13,10 +15,12 @@ namespace SimplCommerce.Module.Reviews.Controllers
     public class ReviewApiController : Controller
     {
         private readonly IReviewRepository _reviewRepository;
+        private readonly IMediator _mediator;
 
-        public ReviewApiController(IReviewRepository reviewRepository)
+        public ReviewApiController(IReviewRepository reviewRepository, IMediator mediator)
         {
             _reviewRepository = reviewRepository;
+            _mediator = mediator;
         }
 
         [HttpGet]
@@ -80,14 +84,12 @@ namespace SimplCommerce.Module.Reviews.Controllers
                     if (search.CreatedOn.before != null)
                     {
                         DateTimeOffset before = search.CreatedOn.before;
-                        before = before.Date.AddDays(1);
                         query = query.Where(x => x.CreatedOn <= before);
                     }
 
                     if (search.CreatedOn.after != null)
                     {
                         DateTimeOffset after = search.CreatedOn.after;
-                        after = after.Date;
                         query = query.Where(x => x.CreatedOn >= after);
                     }
                 }
@@ -123,8 +125,30 @@ namespace SimplCommerce.Module.Reviews.Controllers
             if (Enum.IsDefined(typeof(ReviewStatus), statusId))
             {
                 review.Status = (ReviewStatus) statusId;
-                _reviewRepository.SaveChange();
-                return Ok();
+                _reviewRepository.SaveChanges();
+
+                var rattings = _reviewRepository.Query()
+                    .Where(x => x.EntityId == review.EntityId && x.EntityTypeId == review.EntityTypeId && x.Status == ReviewStatus.Approved);
+
+                var reviewSummary = new ReviewSummaryChanged
+                {
+                    EntityId = review.EntityId,
+                    EntityTypeId = review.EntityTypeId,
+                    ReviewsCount = rattings.Count()
+                };
+                if (reviewSummary.ReviewsCount == 0)
+                {
+                    reviewSummary.RatingAverage = null;
+                }
+                else
+                {
+                    var grouped = rattings.GroupBy(x => x.Rating).Select(x => new { Rating = x.Key, Count = x.Count() });
+                    reviewSummary.RatingAverage = grouped.Select(x => x.Rating * x.Count).Sum() / (double)reviewSummary.ReviewsCount;
+                }
+
+                _mediator.Publish(reviewSummary);
+                _reviewRepository.SaveChanges();
+                return Accepted();
             }
             return BadRequest(new {Error = "unsupported order status"});
         }

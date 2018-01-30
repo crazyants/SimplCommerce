@@ -5,13 +5,15 @@
         .controller('ProductWidgetFormCtrl', ProductWidgetFormCtrl);
 
     /* @ngInject */
-    function ProductWidgetFormCtrl($state, $stateParams, productWidgetService) {
+    function ProductWidgetFormCtrl($state, $stateParams, productWidgetService, translateService) {
         var vm = this;
+        vm.translate = translateService;
         vm.widgetZones = [];
         vm.sorts = [];
         vm.widgetInstance = { widgetZoneId: 1, setting: { numberOfProducts: 4 }, publishStart: new Date() };
         vm.widgetInstanceId = $stateParams.id;
         vm.isEditMode = vm.widgetInstanceId > 0;
+        vm.numberOfWidgets = [];
 
         vm.datePickerPublishStart = {};
         vm.datePickerPublishEnd = {};
@@ -29,10 +31,11 @@
             }
 
             promise
-                .success(function (result) {
+                .then(function (result) {
                     $state.go('widget');
                 })
-                .error(function (error) {
+                .catch(function (response) {
+                    var error = response.data;
                     vm.validationErrors = [];
                     if (error && angular.isObject(error)) {
                         for (var key in error) {
@@ -55,6 +58,16 @@
                 if (!vm.isEditMode) {
                     vm.widgetInstance.setting.orderBy = vm.sorts[0].id;
                 }
+            });
+
+            productWidgetService.getNumberOfWidgets().then(function (result) {
+                var count = parseInt(result.data);
+                if (!vm.isEditMode) {
+                    count = count + 1;
+                }
+
+                for (var i = 1; i <= count; i++)
+                    vm.numberOfWidgets.push(i);
             });
 
             if (vm.isEditMode) {

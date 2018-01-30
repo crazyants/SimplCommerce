@@ -4,10 +4,17 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.Loader;
+using System.Threading.Tasks;
 using Autofac;
 using Autofac.Extensions.DependencyInjection;
+using Autofac.Features.Variance;
 using MediatR;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.OAuth;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -17,15 +24,17 @@ using SimplCommerce.Infrastructure.Data;
 using SimplCommerce.Module.Core.Data;
 using SimplCommerce.Module.Core.Extensions;
 using SimplCommerce.Module.Core.Models;
+using SimplCommerce.Infrastructure.Web.ModelBinders;
+using SimplCommerce.Infrastructure.Web;
 
 namespace SimplCommerce.WebHost.Extensions
 {
     public static class ServiceCollectionExtensions
     {
-        public static IServiceCollection LoadInstalledModules(this IServiceCollection services,
-            IList<ModuleInfo> modules, IHostingEnvironment hostingEnvironment)
+        public static IServiceCollection LoadInstalledModules(this IServiceCollection services, string contentRootPath)
         {
-            var moduleRootFolder = new DirectoryInfo(Path.Combine(hostingEnvironment.ContentRootPath, "Modules"));
+            var modules = new List<ModuleInfo>();
+            var moduleRootFolder = new DirectoryInfo(Path.Combine(contentRootPath, "Modules"));
             var moduleFolders = moduleRootFolder.GetDirectories();
 
             foreach (var moduleFolder in moduleFolders)
@@ -43,14 +52,12 @@ namespace SimplCommerce.WebHost.Extensions
                     {
                         assembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(file.FullName);
                     }
-                    catch (FileLoadException ex)
+                    catch (FileLoadException)
                     {
-                        if (ex.Message == "Assembly with same name is already loaded")
-                        {
-                            // Get loaded assembly
-                            assembly = Assembly.Load(new AssemblyName(Path.GetFileNameWithoutExtension(file.Name)));
-                        }
-                        else
+                        // Get loaded assembly
+                        assembly = Assembly.Load(new AssemblyName(Path.GetFileNameWithoutExtension(file.Name)));
+
+                        if (assembly == null)
                         {
                             throw;
                         }
@@ -68,12 +75,26 @@ namespace SimplCommerce.WebHost.Extensions
                 }
             }
 
+            foreach (var module in modules)
+            {
+                var moduleInitializerType = module.Assembly.GetTypes().FirstOrDefault(x => typeof(IModuleInitializer).IsAssignableFrom(x));
+                if ((moduleInitializerType != null) && (moduleInitializerType != typeof(IModuleInitializer)))
+                {
+                    services.AddSingleton(typeof(IModuleInitializer), moduleInitializerType);
+                }
+            }
+
             GlobalConfiguration.Modules = modules;
             return services;
         }
+
         public static IServiceCollection AddCustomizedMvc(this IServiceCollection services, IList<ModuleInfo> modules)
         {
-            var mvcBuilder = services.AddMvc()
+            var mvcBuilder = services
+                .AddMvc(o =>
+                {
+                    o.ModelBinderProviders.Insert(0, new InvariantDecimalModelBinderProvider());
+                })
                 .AddRazorOptions(o =>
                 {
                     foreach (var module in modules)
@@ -86,17 +107,7 @@ namespace SimplCommerce.WebHost.Extensions
 
             foreach (var module in modules)
             {
-                // Register controller from modules
                 mvcBuilder.AddApplicationPart(module.Assembly);
-
-                // Register dependency in modules
-                var moduleInitializerType =
-                    module.Assembly.GetTypes().FirstOrDefault(x => typeof(IModuleInitializer).IsAssignableFrom(x));
-                if ((moduleInitializerType != null) && (moduleInitializerType != typeof(IModuleInitializer)))
-                {
-                    var moduleInitializer = (IModuleInitializer)Activator.CreateInstance(moduleInitializerType);
-                    moduleInitializer.Init(services);
-                }
             }
 
             return services;
@@ -104,44 +115,87 @@ namespace SimplCommerce.WebHost.Extensions
 
         public static IServiceCollection AddCustomizedIdentity(this IServiceCollection services)
         {
-            services.AddIdentity<User, Role>(configure => { configure.Cookies.ApplicationCookie.LoginPath = "/login"; })
+            services
+                .AddIdentity<User, Role>(options =>
+                {
+                    options.Password.RequireDigit = false;
+                    options.Password.RequiredLength = 4;
+                    options.Password.RequireNonAlphanumeric = false;
+                    options.Password.RequireUppercase = false;
+                    options.Password.RequireLowercase = false;
+                    options.Password.RequiredUniqueChars = 0;
+                })
                 .AddRoleStore<SimplRoleStore>()
                 .AddUserStore<SimplUserStore>()
                 .AddDefaultTokenProviders();
+
+            services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+                .AddCookie(o => o.LoginPath = new PathString("/login"))
+
+                .AddFacebook(x =>
+            {
+                x.AppId = "1716532045292977";
+                x.AppSecret = "dfece01ae919b7b8af23f962a1f87f95";
+
+                x.Events = new OAuthEvents
+                {
+                    OnRemoteFailure = ctx => HandleRemoteLoginFailure(ctx)
+                };
+            })
+                .AddGoogle(x =>
+                {
+                    x.ClientId = "583825788849-8g42lum4trd5g3319go0iqt6pn30gqlq.apps.googleusercontent.com";
+                    x.ClientSecret = "X8xIiuNEUjEYfiEfiNrWOfI4";
+                    x.Events = new OAuthEvents
+                    {
+                        OnRemoteFailure = ctx => HandleRemoteLoginFailure(ctx)
+                    };
+                });
+
+            services.ConfigureApplicationCookie(x => x.LoginPath = new PathString("/login"));
             return services;
         }
 
-        public static IServiceCollection AddCustomizedDataStore(this IServiceCollection services, IConfigurationRoot configuration)
+        public static IServiceCollection AddCustomizedDataStore(this IServiceCollection services, IConfiguration configuration)
         {
-            services.AddDbContext<SimplDbContext>(options =>
+            services.AddDbContextPool<SimplDbContext>(options =>
                 options.UseSqlServer(configuration.GetConnectionString("DefaultConnection"),
                     b => b.MigrationsAssembly("SimplCommerce.WebHost")));
             return services;
         }
 
         public static IServiceProvider Build(this IServiceCollection services,
-            IConfigurationRoot configuration, IHostingEnvironment hostingEnvironment)
+            IConfiguration configuration, IHostingEnvironment hostingEnvironment)
         {
             var builder = new ContainerBuilder();
             builder.RegisterGeneric(typeof(Repository<>)).As(typeof(IRepository<>));
             builder.RegisterGeneric(typeof(RepositoryWithTypedId<,>)).As(typeof(IRepositoryWithTypedId<,>));
+            builder.RegisterType<RazorViewRenderer>().As<IRazorViewRenderer>();
 
-            builder.RegisterAssemblyTypes(typeof(IMediator).GetTypeInfo().Assembly).AsImplementedInterfaces();
-            builder.Register<SingleInstanceFactory>(ctx =>
-            {
-                var c = ctx.Resolve<IComponentContext>();
-                return t => c.Resolve(t);
-            });
+            builder.RegisterSource(new ContravariantRegistrationSource());
+            builder.RegisterType<SequentialMediator>().As<IMediator>().InstancePerLifetimeScope();
+            builder
+              .Register<SingleInstanceFactory>(ctx =>
+              {
+                  var c = ctx.Resolve<IComponentContext>();
+                  return t => { object o; return c.TryResolve(t, out o) ? o : null; };
+              })
+              .InstancePerLifetimeScope();
 
-            builder.Register<MultiInstanceFactory>(ctx =>
-            {
-                var c = ctx.Resolve<IComponentContext>();
-                return t => (IEnumerable<object>)c.Resolve(typeof(IEnumerable<>).MakeGenericType(t));
-            });
+            builder
+              .Register<MultiInstanceFactory>(ctx =>
+              {
+                  var c = ctx.Resolve<IComponentContext>();
+                  return t => (IEnumerable<object>)c.Resolve(typeof(IEnumerable<>).MakeGenericType(t));
+              })
+              .InstancePerLifetimeScope();
 
             foreach (var module in GlobalConfiguration.Modules)
             {
-                builder.RegisterAssemblyTypes(module.Assembly).AsImplementedInterfaces();
+                builder.RegisterAssemblyTypes(module.Assembly).Where(t => t.Name.EndsWith("Repository")).AsImplementedInterfaces();
+                builder.RegisterAssemblyTypes(module.Assembly).Where(t => t.Name.EndsWith("Service")).AsImplementedInterfaces();
+                builder.RegisterAssemblyTypes(module.Assembly).Where(t => t.Name.EndsWith("ServiceProvider")).AsImplementedInterfaces();
+                builder.RegisterAssemblyTypes(module.Assembly).Where(t => t.Name.EndsWith("Handler")).AsImplementedInterfaces();
             }
 
             builder.RegisterInstance(configuration);
@@ -149,6 +203,13 @@ namespace SimplCommerce.WebHost.Extensions
             builder.Populate(services);
             var container = builder.Build();
             return container.Resolve<IServiceProvider>();
+        }
+
+        private static Task HandleRemoteLoginFailure(RemoteFailureContext ctx)
+        {
+            ctx.Response.Redirect("/Login");
+            ctx.HandleResponse();
+            return Task.CompletedTask;
         }
     }
 }

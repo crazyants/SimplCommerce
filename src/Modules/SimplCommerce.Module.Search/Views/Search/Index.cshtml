@@ -7,7 +7,7 @@
 }
 
 @section head {
-    <link href="~/lib/nouislider/nouislider.min.css" rel="stylesheet" />
+    <link simpl-append-version="true" href="~/lib/nouislider/nouislider.min.css" rel="stylesheet" />
 }
 
 <div class="row">
@@ -143,12 +143,22 @@
                 </div>
             }
         </div>
+        <div class="row">
+            <div class="col-md-12 text-right">
+                <cs-pager cs-paging-pagesize="@Model.CurrentSearchOption.PageSize"
+                          cs-paging-pagenumber="@Model.CurrentSearchOption.Page"
+                          cs-paging-totalitems="@Model.TotalProduct"
+                          cs-pagenumber-param="page"
+                          asp-basehref="~/search"
+                          asp-all-route-data="@Model.CurrentSearchOption.ToDictionary()"></cs-pager>
+            </div>
+        </div>
     </div>
 </div>
 
 @section scripts {
-    <script src="~/lib/wnumb/wNumb.js"></script>
-    <script src="~/lib/nouislider/nouislider.min.js"></script>
+    <script simpl-append-version="true" src="~/lib/wnumb/wNumb.js"></script>
+    <script simpl-append-version="true" src="~/lib/nouislider/nouislider.min.js"></script>
 
     <script>
         var productFilter = {};
@@ -160,5 +170,5 @@
             currentMax: @((Model.CurrentSearchOption.MaxPrice ?? Model.FilterOption.Price.MaxPrice).ToString("F0"))
         };
     </script>
-    <script src="~/catalog/product-filter.js"></script>
+    <script simpl-append-version="true" src="~/modules/catalog/product-filter.js"></script>
 }

@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using SimplCommerce.Module.Catalog.Models;
 
 namespace SimplCommerce.Module.Catalog.ViewModels
 {
@@ -10,9 +11,13 @@ namespace SimplCommerce.Module.Catalog.ViewModels
 
         public string NormalizedName { get; set; }
 
-        public decimal Price { get; set; }
+        public bool IsCallForPricing { get; set; }
 
-        public decimal? OldPrice { get; set; }
+        public bool IsAllowToOrder { get; set; }
+
+        public int? StockQuantity { get; set; }
+
+        public CalculatedProductPrice CalculatedProductPrice { get; set; }
 
         public IList<ProductDetailVariationOption> Options { get; protected set; } = new List<ProductDetailVariationOption>();
     }
